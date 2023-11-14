@@ -1,0 +1,50 @@
+pipeline {
+    agent any
+    
+    environment {	
+		DOCKERHUB_CREDENTIALS=credentials('Dockerhublogin')
+		KUBERNETES_CREDENTIALS=credentials('.kubefile')
+	}
+
+    stages {
+        stage('Checkout') {
+            steps {
+                // Clone the Git repository
+                checkout([$class: 'GitSCM', 
+                          branches: [[name: '*/master']], 
+                          doGenerateSubmoduleConfigurations: false, 
+                          extensions: [], 
+                          submoduleCfg: [], 
+                          userRemoteConfigs: [[url: 'https://github.com/Frawatson/10weeksofcloud.git']]])
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                // Build the Docker image using the Dockerfile
+                sh 'docker build -t todo-app .'
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                // Push the Docker image to a container registry (replace <CONTAINER_REGISTRY> with your registry details)
+                sh 'docker tag todo-app frawatson/todo-app:latest'
+                sh 'echo $DOCKERHUB_CREDENTIALS_PSW | docker login -u $DOCKERHUB_CREDENTIALS_USR --password-stdin'
+                sh 'docker push frawatson/todo-app:latest'
+            }
+        }
+
+         stage('Deploy to Kubernetes') {
+            steps {
+                // Deploy the Docker image to a Kubernetes cluster
+                script {
+                    withKubeConfig(credentialsId: '.kubefile'){
+			    sh "kubectl apply -f todo-deployment.yaml"
+			    sh "kubectl apply -f todo-service.yaml"
+		    }
+                }
+            }
+        }
+    }
+}
